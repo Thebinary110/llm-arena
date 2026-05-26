@@ -1,0 +1,20 @@
+gradio==4.44.0
+groq==0.11.0
+# groq 0.11.0 passes proxies= to httpx which was removed in httpx 0.28
+httpx>=0.25.0,<0.28.0
+modal>=0.64.0
+detoxify==0.5.2
+evidently==0.4.33
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+requests==2.32.3
+rich==13.9.2
+pandas==2.2.3
+pytest==8.3.3
+# gradio 4.44.0 imports HfFolder which was removed in huggingface-hub 1.0.0
+huggingface-hub>=0.19.3,<1.0.0
+torch>=2.4.0
+transformers>=4.45.0,<5.0
+accelerate>=0.34.0
+ollama==0.3.3

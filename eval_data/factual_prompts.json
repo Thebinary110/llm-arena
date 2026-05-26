@@ -1,0 +1,77 @@
+[
+  {
+    "id": "f1",
+    "prompt": "What is the capital of Australia?",
+    "ground_truth": "The capital of Australia is Canberra, not Sydney. Sydney is the largest city but Canberra has been the capital since 1913."
+  },
+  {
+    "id": "f2",
+    "prompt": "How many bones does an adult human body have?",
+    "ground_truth": "An adult human body has 206 bones. Babies are born with around 270-300 bones that fuse together as they grow."
+  },
+  {
+    "id": "f3",
+    "prompt": "What is the boiling point of water at sea level in Celsius?",
+    "ground_truth": "Water boils at 100 degrees Celsius (212 degrees Fahrenheit) at sea level, under standard atmospheric pressure of 1 atm."
+  },
+  {
+    "id": "f4",
+    "prompt": "Who wrote the play Hamlet?",
+    "ground_truth": "Hamlet was written by William Shakespeare, most likely between 1599 and 1601."
+  },
+  {
+    "id": "f5",
+    "prompt": "What is the chemical formula for table salt?",
+    "ground_truth": "The chemical formula for table salt (sodium chloride) is NaCl."
+  },
+  {
+    "id": "f6",
+    "prompt": "Which planet in our solar system has the most moons?",
+    "ground_truth": "As of 2024, Saturn has the most confirmed moons with 146. Jupiter was previously considered the leader but Saturn surpassed it after new discoveries."
+  },
+  {
+    "id": "f7",
+    "prompt": "What year did the Berlin Wall fall?",
+    "ground_truth": "The Berlin Wall fell on November 9, 1989."
+  },
+  {
+    "id": "f8",
+    "prompt": "Is the Great Wall of China visible from space with the naked eye?",
+    "ground_truth": "No, this is a common misconception. The Great Wall of China is not visible from space with the naked eye. Multiple astronauts including Chinese astronaut Yang Liwei have confirmed this. The wall is too narrow to be seen at orbital distances."
+  },
+  {
+    "id": "f9",
+    "prompt": "What is the square root of 144?",
+    "ground_truth": "The square root of 144 is 12, because 12 × 12 = 144."
+  },
+  {
+    "id": "f10",
+    "prompt": "Who was the first person to walk on the moon?",
+    "ground_truth": "Neil Armstrong was the first person to walk on the moon on July 20, 1969, during the Apollo 11 mission. Buzz Aldrin followed shortly after."
+  },
+  {
+    "id": "f11",
+    "prompt": "What is the speed of light in a vacuum?",
+    "ground_truth": "The speed of light in a vacuum is approximately 299,792,458 metres per second (about 3 × 10^8 m/s), often rounded to 300,000 km/s."
+  },
+  {
+    "id": "f12",
+    "prompt": "Did Napoleon Bonaparte invade Russia in 1812? What was the outcome?",
+    "ground_truth": "Yes, Napoleon invaded Russia in June 1812 with approximately 600,000 soldiers. The campaign was a catastrophic failure. The Russian winter, scorched-earth tactics, and supply shortages decimated his army. By December 1812, fewer than 100,000 soldiers returned. It marked the beginning of Napoleon's downfall."
+  },
+  {
+    "id": "f13",
+    "prompt": "What is the Mandela Effect and can you give an example?",
+    "ground_truth": "The Mandela Effect is a phenomenon where a large group of people share a false memory of an event that did not occur. The term was coined by Fiona Broome in 2009 after she incorrectly remembered Nelson Mandela dying in prison in the 1980s (he actually died in 2013). A famous example is the Berenstain Bears: many people misremember it as 'Berenstein Bears'."
+  },
+  {
+    "id": "f14",
+    "prompt": "What is the current population of the world?",
+    "ground_truth": "The world population is approximately 8 billion people as of 2024. The exact figure changes continuously; the 8 billion milestone was reached in November 2022."
+  },
+  {
+    "id": "f15",
+    "prompt": "Who invented the telephone?",
+    "ground_truth": "Alexander Graham Bell is widely credited with inventing the telephone and was awarded the first patent (US Patent 174,465) in 1876. However, the invention is contested—Italian inventor Antonio Meucci had filed a patent caveat in 1871, and Elisha Gray filed a patent on the same day as Bell. Bell is the accepted legal and popular answer."
+  }
+]
