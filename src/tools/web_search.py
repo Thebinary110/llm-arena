@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(BaseTool):
-    """Searches the web via DuckDuckGo — no API key required."""
+    """Searches the web via DuckDuckGo -- no API key required."""
 
     def __init__(self, max_results: int = 3) -> None:
         self.max_results = max_results

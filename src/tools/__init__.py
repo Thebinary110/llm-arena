@@ -1,1 +1,1 @@
-"""Tools package — web search and tool registry."""
+"""Tools package -- web search and tool registry."""

@@ -20,7 +20,7 @@ class ConversationMemory:
     """
 
     def __init__(self, max_turns: int) -> None:
-        # Each turn = 1 user + 1 assistant message → maxlen = max_turns * 2
+        # Each turn = 1 user + 1 assistant message -> maxlen = max_turns * 2
         self._history: deque[Message] = deque(maxlen=max_turns * 2)
         self._max_turns = max_turns
 

@@ -108,7 +108,7 @@ class OSSAssistant(BaseAssistant):
     async def _stream_model(self, messages: list[dict]) -> AsyncGenerator[str, None]:
         """Stream tokens from Ollama (or fall back to single chunk for Modal)."""
         if self.config.USE_MODAL:
-            # Modal endpoint doesn't support streaming — yield as one chunk
+            # Modal endpoint doesn't support streaming -- yield as one chunk
             response = await asyncio.to_thread(self._call_modal, messages)
             if not response.is_error:
                 yield response.content

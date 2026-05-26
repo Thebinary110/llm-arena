@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import AsyncGenerator
 
 import gradio as gr
@@ -15,18 +16,18 @@ from src.guardrails.safety_filter import SafetyFilter
 logging.basicConfig(handlers=[RichHandler(rich_tracebacks=True)], level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── UI string constants ────────────────────────────────────────────────────────
-TITLE = "⚔️ LLM Arena"
+# -- UI string constants -------------------------------------------------------
+TITLE = "[Arena] LLM Arena"
 SUBTITLE = "OSS (Qwen 2.5-0.5B) vs Frontier (Llama 3.3-70B via Groq)"
-OSS_LABEL = "OSS Assistant — Qwen 2.5-0.5B"
-FRONTIER_LABEL = "Frontier Assistant — Llama 3.3-70B"
+OSS_LABEL = "OSS Assistant -- Qwen 2.5-0.5B"
+FRONTIER_LABEL = "Frontier Assistant -- Llama 3.3-70B"
 INPUT_PLACEHOLDER = "Type your message and press Enter or click Send..."
 SEND_BUTTON_LABEL = "Send"
 CLEAR_BUTTON_LABEL = "Clear Both"
-SAFETY_ACCORDION_LABEL = "🛡️ Safety Analysis (last response)"
-RESPONSE_TOXIC_SUFFIX = "\n\n⚠️ [SAFETY WARNING: This response was flagged for toxic content]"
-ERROR_PREFIX = "❌ Error: "
-CURSOR = "▋"
+SAFETY_ACCORDION_LABEL = "[Safety] Analysis (last response)"
+RESPONSE_TOXIC_SUFFIX = "\n\n[WARNING] This response was flagged for toxic content."
+ERROR_PREFIX = "[Error] "
+CURSOR = "|"
 
 
 def build_app(
@@ -34,36 +35,49 @@ def build_app(
     frontier_assistant: BaseAssistant,
 ) -> gr.Blocks:
     """Construct and return the Gradio Blocks application."""
-    safety_filter = SafetyFilter(threshold=0.7)
+    # Bug 2 fix: use config threshold instead of hardcoded 0.7
+    safety_filter = SafetyFilter(threshold=oss_assistant.config.TOXICITY_THRESHOLD)
 
-    # ── helpers ───────────────────────────────────────────────────────────────
-    def _format_safety_md(oss_safety, frontier_safety) -> str:
+    # -- helpers ---------------------------------------------------------------
+    def _format_safety_md(
+        oss_safety,
+        frontier_safety,
+        oss_latency_ms: float | None = None,
+        frontier_latency_ms: float | None = None,
+    ) -> str:
         if oss_safety is None and frontier_safety is None:
             return "_No messages yet._"
         lines: list[str] = []
         if oss_safety is not None:
-            flag = "🔴 TOXIC" if oss_safety.is_toxic else "🟢 Clean"
+            flag = "[TOXIC]" if oss_safety.is_toxic else "[Clean]"
             lines.append(f"**OSS Assistant:** {flag}")
             lines.append(f"- Toxicity score: `{oss_safety.toxicity_score:.3f}`")
             if oss_safety.flagged_categories:
                 lines.append(f"- Flagged: `{', '.join(oss_safety.flagged_categories)}`")
+            # Bug 3 fix: show latency and explicit token N/A for streaming
+            if oss_latency_ms is not None:
+                lines.append(f"- Latency: `{oss_latency_ms:.0f} ms`")
+            lines.append("- Tokens: `N/A (streaming)`")
         lines.append("")
         if frontier_safety is not None:
-            flag = "🔴 TOXIC" if frontier_safety.is_toxic else "🟢 Clean"
+            flag = "[TOXIC]" if frontier_safety.is_toxic else "[Clean]"
             lines.append(f"**Frontier Assistant:** {flag}")
             lines.append(f"- Toxicity score: `{frontier_safety.toxicity_score:.3f}`")
             if frontier_safety.flagged_categories:
                 lines.append(f"- Flagged: `{', '.join(frontier_safety.flagged_categories)}`")
+            if frontier_latency_ms is not None:
+                lines.append(f"- Latency: `{frontier_latency_ms:.0f} ms`")
+            lines.append("- Tokens: `N/A (streaming)`")
         return "\n".join(lines)
 
     def _format_memory_md(label: str, assistant: BaseAssistant) -> str:
         sm = getattr(assistant, "_structured_memory", None)
         if sm is None:
-            return f"**{label}** — _Memory not available._"
+            return f"**{label}** -- _Memory not available._"
         try:
             data = sm.get_all_facts()
         except Exception as exc:
-            return f"**{label}** — _Error reading memory: {exc}_"
+            return f"**{label}** -- _Error reading memory: {exc}_"
 
         lines = [f"### {label}"]
         if data.get("facts"):
@@ -77,7 +91,7 @@ def build_app(
             lines.append("_No memories stored yet._")
         return "\n".join(lines)
 
-    # ── streaming handler (Feature 1 + 2) ────────────────────────────────────
+    # -- streaming handler (parallel async) ------------------------------------
     async def send_message_stream(
         user_input: str,
         oss_history: list[dict],
@@ -114,7 +128,6 @@ def build_app(
 
         yield "", oss_history, frontier_history, oss_history, frontier_history, "_Generating..._"
 
-        # Queues for parallel streaming (Feature 2)
         oss_queue: asyncio.Queue[str | None] = asyncio.Queue()
         frontier_queue: asyncio.Queue[str | None] = asyncio.Queue()
 
@@ -126,6 +139,8 @@ def build_app(
                 await queue.put(f"{ERROR_PREFIX}{exc}")
             await queue.put(None)
 
+        # Bug 3 fix: track per-model stream latency from task start to completion
+        stream_start = time.perf_counter()
         oss_task = asyncio.create_task(_fill(oss_queue, oss_assistant))
         frontier_task = asyncio.create_task(_fill(frontier_queue, frontier_assistant))
 
@@ -133,6 +148,8 @@ def build_app(
         frontier_full = ""
         oss_done = False
         frontier_done = False
+        oss_latency_ms: float | None = None
+        frontier_latency_ms: float | None = None
 
         while not (oss_done and frontier_done):
             updated = False
@@ -141,6 +158,8 @@ def build_app(
                 chunk = oss_queue.get_nowait()
                 if chunk is None:
                     oss_done = True
+                    if oss_latency_ms is None:
+                        oss_latency_ms = (time.perf_counter() - stream_start) * 1000
                 else:
                     oss_full += chunk
                     updated = True
@@ -149,6 +168,8 @@ def build_app(
                 chunk = frontier_queue.get_nowait()
                 if chunk is None:
                     frontier_done = True
+                    if frontier_latency_ms is None:
+                        frontier_latency_ms = (time.perf_counter() - stream_start) * 1000
                 else:
                     frontier_full += chunk
                     updated = True
@@ -187,12 +208,16 @@ def build_app(
         oss_history[-1]["content"] = oss_display
         frontier_history[-1]["content"] = frontier_display
 
-        safety_md = _format_safety_md(oss_safety, frontier_safety)
+        safety_md = _format_safety_md(
+            oss_safety, frontier_safety, oss_latency_ms, frontier_latency_ms
+        )
 
+        # Bug 3 fix: log safety_md length to verify non-empty before yield
         logger.info(
-            "Turn complete | OSS %d chars | Frontier %d chars",
+            "Turn complete | OSS %d chars | Frontier %d chars | safety_md %d chars",
             len(oss_full),
             len(frontier_full),
+            len(safety_md),
         )
 
         yield (
@@ -239,7 +264,7 @@ def build_app(
             _format_memory_md(FRONTIER_LABEL, frontier_assistant),
         )
 
-    # ── layout ────────────────────────────────────────────────────────────────
+    # -- layout ----------------------------------------------------------------
     with gr.Blocks(title=TITLE, theme=gr.themes.Soft()) as demo:
 
         gr.Markdown(f"# {TITLE}")
@@ -250,8 +275,8 @@ def build_app(
 
         with gr.Tabs():
 
-            # ── Chat tab ──────────────────────────────────────────────────────
-            with gr.Tab("💬 Chat"):
+            # Chat tab
+            with gr.Tab("Chat"):
                 with gr.Row():
                     with gr.Column(scale=1):
                         gr.Markdown(f"### {OSS_LABEL}")
@@ -260,7 +285,7 @@ def build_app(
                             type="messages",
                             height=480,
                             show_copy_button=True,
-                            avatar_images=(None, "🤖"),
+                            avatar_images=(None, None),
                         )
                     with gr.Column(scale=1):
                         gr.Markdown(f"### {FRONTIER_LABEL}")
@@ -269,7 +294,7 @@ def build_app(
                             type="messages",
                             height=480,
                             show_copy_button=True,
-                            avatar_images=(None, "🚀"),
+                            avatar_images=(None, None),
                         )
 
                 with gr.Row():
@@ -283,16 +308,17 @@ def build_app(
                     send_btn  = gr.Button(SEND_BUTTON_LABEL,  variant="primary",   scale=1)
                     clear_btn = gr.Button(CLEAR_BUTTON_LABEL, variant="secondary", scale=1)
 
-                with gr.Accordion(SAFETY_ACCORDION_LABEL, open=False):
+                # Bug 3 fix: open=True so metrics are visible without clicking
+                with gr.Accordion(SAFETY_ACCORDION_LABEL, open=True):
                     safety_display = gr.Markdown("_No messages yet._")
 
-            # ── Memory Inspector tab (Feature 4) ──────────────────────────────
-            with gr.Tab("🧠 Memory Inspector"):
+            # Memory Inspector tab
+            with gr.Tab("Memory Inspector"):
                 with gr.Row():
-                    refresh_btn         = gr.Button("🔄 Refresh",           variant="secondary")
-                    clear_oss_btn       = gr.Button("🗑 Clear OSS Memory",   variant="secondary")
-                    clear_frontier_btn  = gr.Button("🗑 Clear Frontier Memory", variant="secondary")
-                    clear_all_mem_btn   = gr.Button("⚠️ Clear All Memory",  variant="stop")
+                    refresh_btn        = gr.Button("[Refresh] Refresh",           variant="secondary")
+                    clear_oss_btn      = gr.Button("[Clear] Clear OSS Memory",    variant="secondary")
+                    clear_frontier_btn = gr.Button("[Clear] Clear Frontier Memory", variant="secondary")
+                    clear_all_mem_btn  = gr.Button("[!] Clear All Memory",        variant="stop")
 
                 with gr.Row():
                     with gr.Column(scale=1):
@@ -300,7 +326,7 @@ def build_app(
                     with gr.Column(scale=1):
                         frontier_memory_display = gr.Markdown("_Click Refresh to load._")
 
-        # ── event wiring ──────────────────────────────────────────────────────
+        # -- event wiring ------------------------------------------------------
         send_inputs  = [user_input, oss_history_state, frontier_history_state]
         send_outputs = [
             user_input,
@@ -333,7 +359,6 @@ def build_app(
             ],
         )
 
-        # Memory Inspector wiring
         refresh_btn.click(
             fn=refresh_memory,
             outputs=[oss_memory_display, frontier_memory_display],

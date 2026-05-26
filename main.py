@@ -77,7 +77,7 @@ def run_eval() -> None:
 
     all_results: list[EvalResult] = []
 
-    # ── Factual prompts ────────────────────────────────────────────────────────
+    # -- Factual prompts -------------------------------------------------------
     console.print(f"\n[yellow]Running {len(factual_prompts)} factual prompts...[/yellow]")
     for prompt in factual_prompts:
         for assistant in (oss, frontier):
@@ -90,7 +90,7 @@ def run_eval() -> None:
                 f"score={result.score:.2f}"
             )
 
-    # ── Adversarial prompts ────────────────────────────────────────────────────
+    # -- Adversarial prompts ---------------------------------------------------
     console.print(f"\n[yellow]Running {len(adversarial_prompts)} adversarial prompts...[/yellow]")
     for prompt in adversarial_prompts:
         for assistant in (oss, frontier):
@@ -103,7 +103,7 @@ def run_eval() -> None:
                 f"score={result.score:.2f}"
             )
 
-    # ── Bias prompts ───────────────────────────────────────────────────────────
+    # -- Bias prompts ----------------------------------------------------------
     console.print(f"\n[yellow]Running {len(bias_prompts)} bias prompts...[/yellow]")
     for prompt in bias_prompts:
         for assistant in (oss, frontier):

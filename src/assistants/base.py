@@ -16,6 +16,22 @@ if TYPE_CHECKING:
     from src.memory.structured_memory import StructuredMemoryManager
 
 _TAG_RE = re.compile(r"\[REMEMBER:[^\]]*\]", re.IGNORECASE)
+_SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+def _sanitize_collection_name(model_name: str, max_len: int = 40) -> str:
+    """Strip all non-alphanumeric/underscore chars, ensure ChromaDB name is valid.
+
+    ChromaDB requires names that are 3-512 chars, alphanumeric and underscores only
+    (some versions also allow hyphens and dots, but using only [a-zA-Z0-9_] is safe
+    across all versions and avoids the colon bug with names like 'qwen2.5:0.5b').
+    """
+    name = _SAFE_NAME_RE.sub("_", model_name)
+    name = name.strip("_")
+    name = name[:max_len].strip("_")
+    if len(name) < 3:
+        name = name + "_mm"
+    return name
 
 
 @dataclass
@@ -68,11 +84,13 @@ class BaseAssistant(ABC):
             "Relevant past context will be injected automatically when available."
         )
 
+        # Instantiate exactly once here in __init__. Never re-instantiated per turn.
         try:
             from src.memory.structured_memory import StructuredMemoryManager
+            collection_prefix = _sanitize_collection_name(model_name)
             self._structured_memory = StructuredMemoryManager(
                 user_id=user_id,
-                collection_prefix=model_name.replace("/", "_").replace(".", "_")[:40],
+                collection_prefix=collection_prefix,
             )
         except Exception as exc:
             import logging
@@ -112,7 +130,7 @@ class BaseAssistant(ABC):
     def chat(self, user_input: str) -> AssistantResponse:
         """Public entry point: record input, call model, record output, return response.
 
-        Preserved intact — evaluation pipeline depends on this interface.
+        Preserved intact -- evaluation pipeline depends on this interface.
         """
         self.memory.add_user_message(user_input)
         context = ""
@@ -151,13 +169,13 @@ class BaseAssistant(ABC):
 
         messages = self._build_messages(memory_context=context)
 
-        # First pass — stream and collect full response
+        # First pass -- stream and collect full response
         full_content = ""
         async for chunk in self._stream_model(messages):
             full_content += chunk
             yield chunk
 
-        # Tool loop — at most one tool call per turn
+        # Tool loop -- at most one tool call per turn
         if self._tool_registry:
             tool_result = await asyncio.to_thread(
                 self._tool_registry.detect_and_execute, full_content
