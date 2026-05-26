@@ -34,7 +34,7 @@ class ToolRegistry:
             lines.append(f"    Usage: output exactly '{tool.usage_pattern}' on its own line.")
         lines.append(
             "Use a tool when you need current information or facts you are unsure about. "
-            "Output the tool usage line, then stop — the result will be injected automatically."
+            "Output the tool usage line, then stop -- the result will be injected automatically."
         )
         return "\n".join(lines)
 

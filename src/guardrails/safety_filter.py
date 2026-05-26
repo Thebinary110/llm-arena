@@ -1,7 +1,7 @@
 """Real-time toxicity classifier using Detoxify.
 
 Responsibility: classify text and return a SafetyResult.
-This module never modifies or blocks text — that decision belongs to the caller.
+This module never modifies or blocks text -- that decision belongs to the caller.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class SafetyFilter:
             logger.info("Detoxify model loaded successfully.")
         except Exception as exc:
             self._available = False
-            logger.warning("Detoxify failed to load — guardrail disabled. Error: %s", exc)
+            logger.warning("Detoxify failed to load -- guardrail disabled. Error: %s", exc)
 
     def check(self, text: str) -> SafetyResult:
         """Classify text and return a SafetyResult.
