@@ -67,6 +67,8 @@ class BaseAssistant(ABC):
         config,
         tool_registry: "ToolRegistry | None" = None,
         user_id: str = "default",
+        safety_filter=None,
+        working_memory_size: int = 5,
     ) -> None:
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -74,6 +76,7 @@ class BaseAssistant(ABC):
         self.memory = ConversationMemory(config.CONVERSATION_MAX_TURNS)
         self._tool_registry = tool_registry
         self._user_id = user_id
+        self._safety_filter = safety_filter
         self._structured_memory: "StructuredMemoryManager | None" = None
 
         if tool_registry:
@@ -91,6 +94,7 @@ class BaseAssistant(ABC):
             self._structured_memory = StructuredMemoryManager(
                 user_id=user_id,
                 collection_prefix=collection_prefix,
+                working_memory_size=working_memory_size,
             )
         except Exception as exc:
             import logging
@@ -199,16 +203,36 @@ class BaseAssistant(ABC):
                     yield chunk
                 full_content = full_content + tool_block + followup
 
-        clean = self._strip_memory_tags(full_content)
-        self.memory.add_assistant_message(clean)
-
-        if self._structured_memory:
+        response_is_safe = True
+        if self._safety_filter is not None:
             try:
-                await asyncio.to_thread(
-                    self._structured_memory.add_turn, user_input, full_content
-                )
-            except Exception:
-                pass
+                safety_result = await asyncio.to_thread(self._safety_filter.check, full_content)
+                kw_hit = self._safety_filter.hard_filter(full_content)
+                if safety_result.is_toxic or kw_hit is not None:
+                    response_is_safe = False
+                    logger.warning(
+                        "OSS toxic response blocked before memory | score=%.3f | kw=%s",
+                        safety_result.toxicity_score,
+                        kw_hit,
+                    )
+                    if self._structured_memory:
+                        self._structured_memory.clear_working()
+                    self.memory.add_assistant_message(
+                        "[OSS blocked: the model generated unsafe content that was not stored.]"
+                    )
+            except Exception as exc:
+                logger.error("Pre-memory safety check error: %s", exc)
+
+        if response_is_safe:
+            clean = self._strip_memory_tags(full_content)
+            self.memory.add_assistant_message(clean)
+            if self._structured_memory:
+                try:
+                    await asyncio.to_thread(
+                        self._structured_memory.add_turn, user_input, full_content
+                    )
+                except Exception:
+                    pass
 
     def reset(self) -> None:
         """Clear conversation history to start a fresh session."""

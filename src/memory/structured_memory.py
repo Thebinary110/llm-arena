@@ -55,10 +55,10 @@ class StructuredMemoryManager:
       errors from automatic CUDA detection.
     """
 
-    def __init__(self, user_id: str = "default", collection_prefix: str = "assistant") -> None:
+    def __init__(self, user_id: str = "default", collection_prefix: str = "assistant", working_memory_size: int = 5) -> None:
         self._user_id = user_id
         self._prefix = collection_prefix
-        self._working: deque[str] = deque(maxlen=5)
+        self._working: deque[str] = deque(maxlen=working_memory_size)
         self._client: Any = None
         self._episodes: Any = None
         self._facts: Any = None

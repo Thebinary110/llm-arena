@@ -11,7 +11,7 @@ import gradio as gr
 from rich.logging import RichHandler
 
 from src.assistants.base import BaseAssistant
-from src.guardrails.safety_filter import SafetyFilter
+from src.guardrails.safety_filter import SafetyFilter, SafetyResult
 
 logging.basicConfig(handlers=[RichHandler(rich_tracebacks=True)], level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -195,12 +195,29 @@ def build_app(
         await frontier_task
 
         # Safety checks on completed responses
+        # OSS: Detoxify + keyword filter
         oss_safety = safety_filter.check(oss_full)
+        kw_hit = safety_filter.hard_filter(oss_full)
+        if kw_hit is not None:
+            merged_flags = list(set(oss_safety.flagged_categories) | {f"keyword:{kw_hit}"})
+            oss_safety = SafetyResult(
+                is_toxic=True,
+                toxicity_score=max(oss_safety.toxicity_score, 1.0),
+                categories=oss_safety.categories,
+                flagged_categories=merged_flags,
+            )
+
+        # Frontier: Detoxify only
         frontier_safety = safety_filter.check(frontier_full)
 
-        oss_display = oss_full
         if oss_safety.is_toxic:
-            oss_display += RESPONSE_TOXIC_SUFFIX
+            oss_display = (
+                "[OSS blocked] The OSS model attempted to generate unsafe content. "
+                "This response was not stored in memory."
+            )
+        else:
+            oss_display = oss_full
+
         frontier_display = frontier_full
         if frontier_safety.is_toxic:
             frontier_display += RESPONSE_TOXIC_SUFFIX

@@ -13,9 +13,12 @@ import requests
 from rich.logging import RichHandler
 
 from src.assistants.base import AssistantResponse, BaseAssistant
+from src.guardrails.safety_filter import SafetyFilter
 
 logging.basicConfig(handlers=[RichHandler(rich_tracebacks=True)], level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_OSS_MAX_RESPONSE_CHARS = 2000
 
 _SYSTEM_PROMPT = (
     "You are a helpful, harmless, and honest AI assistant. "
@@ -38,6 +41,8 @@ class OSSAssistant(BaseAssistant):
             config=config,
             tool_registry=tool_registry,
             user_id=user_id,
+            safety_filter=SafetyFilter(threshold=config.TOXICITY_THRESHOLD),
+            working_memory_size=3,
         )
 
     def _call_model(self, messages: list[dict]) -> AssistantResponse:
@@ -108,14 +113,19 @@ class OSSAssistant(BaseAssistant):
     async def _stream_model(self, messages: list[dict]) -> AsyncGenerator[str, None]:
         """Stream tokens from Ollama (or fall back to single chunk for Modal)."""
         if self.config.USE_MODAL:
-            # Modal endpoint doesn't support streaming -- yield as one chunk
             response = await asyncio.to_thread(self._call_modal, messages)
             if not response.is_error:
-                yield response.content
+                content = response.content
+                if len(content) > _OSS_MAX_RESPONSE_CHARS:
+                    content = content[:_OSS_MAX_RESPONSE_CHARS] + f"\n\n[Response truncated at {_OSS_MAX_RESPONSE_CHARS} characters.]"
+                yield content
+            else:
+                yield f"[Error] Modal call failed: {response.error}"
             return
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[str | None] = asyncio.Queue()
+        error_event = threading.Event()
 
         def _worker() -> None:
             url = self.config.OLLAMA_BASE_URL.rstrip("/") + "/api/chat"
@@ -134,6 +144,7 @@ class OSSAssistant(BaseAssistant):
                         try:
                             data = json.loads(raw_line)
                         except json.JSONDecodeError:
+                            logger.warning("OSS malformed JSON chunk, skipping")
                             continue
                         chunk = data.get("message", {}).get("content", "")
                         if chunk:
@@ -142,14 +153,29 @@ class OSSAssistant(BaseAssistant):
                             break
             except Exception as exc:
                 logger.error("Ollama stream error: %s", exc)
+                error_event.set()
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)
 
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
 
+        accumulated_len = 0
         while True:
             chunk = await queue.get()
             if chunk is None:
+                if error_event.is_set() and accumulated_len > 0:
+                    yield "\n\n[Note: connection lost mid-stream, response may be incomplete.]"
+                elif error_event.is_set():
+                    yield "[Error] Ollama connection failed. Check that Ollama is running."
                 break
+            remaining = _OSS_MAX_RESPONSE_CHARS - accumulated_len
+            if remaining <= 0:
+                break
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining]
+                yield chunk
+                yield f"\n\n[Response truncated at {_OSS_MAX_RESPONSE_CHARS} characters.]"
+                break
+            accumulated_len += len(chunk)
             yield chunk
