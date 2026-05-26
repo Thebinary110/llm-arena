@@ -18,3 +18,8 @@ torch>=2.4.0
 transformers>=4.45.0,<5.0
 accelerate>=0.34.0
 ollama==0.3.3
+# Feature additions
+duckduckgo-search==6.2.13
+# chromadb 0.5.x requires chroma-hnswlib (needs MSVC on Windows); use 1.x which ships without it
+chromadb>=1.0.0
+sentence-transformers==3.1.1

@@ -32,11 +32,16 @@ def run_chat() -> None:
     from config import config
     from src.assistants.oss_assistant import OSSAssistant
     from src.assistants.frontier_assistant import FrontierAssistant
+    from src.tools.tool_registry import ToolRegistry
+    from src.tools.web_search import WebSearchTool
     from src.ui.app import build_app
 
     console.print("[bold cyan]Starting Dual AI Assistant Chat UI...[/bold cyan]")
-    oss = OSSAssistant(config=config)
-    frontier = FrontierAssistant(config=config)
+    registry = ToolRegistry()
+    registry.register(WebSearchTool(max_results=3))
+
+    oss = OSSAssistant(config=config, tool_registry=registry, user_id="oss")
+    frontier = FrontierAssistant(config=config, tool_registry=registry, user_id="frontier")
     demo = build_app(oss, frontier)
     demo.launch(share=True)
 

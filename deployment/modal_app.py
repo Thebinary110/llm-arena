@@ -9,6 +9,7 @@ The web endpoint URL becomes the MODAL_ENDPOINT env var consumed by OSSAssistant
 from __future__ import annotations
 
 import modal
+import torch
 
 app = modal.App("qwen-assistant")
 
@@ -28,6 +29,7 @@ image = (
     image=image,
     gpu="T4",
     scaledown_window=300,
+    min_containers=1
 )
 class QwenModel:
     """Holds a loaded Qwen2.5-0.5B-Instruct model for serverless inference.
@@ -45,8 +47,8 @@ class QwenModel:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype="auto",
-            device_map="auto",
+            torch_dtype=torch.float16,
+            device_map="cuda",
         )
 
     @modal.method()
