@@ -9,6 +9,7 @@ dist/
 .claude
 build/
 .venv/
+DEPLOY.md
 venv/
 *.log
 .DS_Store
