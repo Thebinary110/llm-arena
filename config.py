@@ -45,6 +45,15 @@ class Config(BaseSettings):
         default=0.7,
         description="Detoxify score above which content is considered toxic",
     )
+    PINECONE_API_KEY: str = Field(default="", description="Pinecone API key for cloud vector storage")
+    PINECONE_INDEX_NAME: str = Field(
+        default="llm-arena-memory",
+        description="Pinecone index name used for episodic and semantic memory",
+    )
+    USE_PINECONE: bool = Field(
+        default=False,
+        description="If True, use Pinecone for memory storage; False uses local ChromaDB",
+    )
     USE_MODAL: bool = Field(
         default=False,
         description="If True, route OSS calls to Modal endpoint; otherwise use Ollama",

@@ -1,3 +1,14 @@
+---
+title: LLM Arena
+emoji: robot
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: 4.44.0
+app_file: app.py
+pinned: false
+---
+
 # Dual AI Assistant Comparison System
 
 A production-quality evaluation platform that runs two AI assistants side by side — an open-source Qwen2.5-0.5B model and Groq-hosted Llama-3.3-70B — scoring each on hallucination, bias handling, and content safety using an LLM judge and Detoxify guardrails.
