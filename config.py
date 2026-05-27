@@ -15,6 +15,7 @@ class Config(BaseSettings):
     """
 
     GROQ_API_KEY: str = Field(..., description="Groq API key for frontier model access")
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for content moderation")
     HF_TOKEN: str = Field(default="", description="HuggingFace token (optional fallback)")
     MODAL_ENDPOINT: str = Field(
         default="https://your-modal-endpoint.modal.run",
@@ -31,6 +32,10 @@ class Config(BaseSettings):
     FRONTIER_MODEL_NAME: str = Field(
         default="llama-3.3-70b-versatile",
         description="Model name for the Groq frontier assistant",
+    )
+    LLAMAGUARD_MODEL: str = Field(
+        default="llama-3.1-8b-instant",
+        description="Model used for LlamaGuard-style content moderation via Groq",
     )
     CONVERSATION_MAX_TURNS: int = Field(
         default=10,
