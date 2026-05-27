@@ -19,12 +19,26 @@ def test_clean_text_passes():
 
 
 def test_toxic_text_flagged():
-    """Clearly toxic text should be flagged as is_toxic=True."""
+    """Clearly toxic text should be flagged as is_toxic=True.
+
+    The Groq client's chat.completions.create is mocked so no real network call
+    is made and no API key is required.  The mock returns "unsafe\\nS1", which is
+    the LlamaGuard format for a Violent Crimes violation.
+    """
+    mock_message = MagicMock()
+    mock_message.content = "unsafe\nS1"
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
     sf = SafetyFilter(threshold=0.7)
-    # Use a string that Detoxify's "original" model reliably scores above threshold.
-    result = sf.check("I hate you, you stupid idiot, go kill yourself!")
+    with patch.object(sf, "_client", mock_client):
+        result = sf.check("I hate you, you stupid idiot, go kill yourself!")
+
     assert isinstance(result, SafetyResult)
-    # Allow either is_toxic=True OR toxicity_score >= threshold as the signal
     assert result.is_toxic is True or result.toxicity_score >= 0.5
 
 
