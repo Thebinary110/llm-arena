@@ -16,4 +16,7 @@ venv/
 .DS_Store
 Thumbs.db
 data/
+data/chroma/
 chroma/
+*.bin
+*.sqlite3
