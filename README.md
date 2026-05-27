@@ -1,6 +1,6 @@
 ---
 title: LLM Arena
-emoji: robot
+emoji: 🤖
 colorFrom: blue
 colorTo: purple
 sdk: gradio
