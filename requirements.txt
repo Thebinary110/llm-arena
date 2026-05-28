@@ -1,4 +1,4 @@
-gradio==4.44.0
+gradio==5.9.1
 groq==0.11.0
 # groq 0.11.0 passes proxies= to httpx which was removed in httpx 0.28
 httpx>=0.25.0,<0.28.0
