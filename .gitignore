@@ -17,6 +17,7 @@ venv/
 Thumbs.db
 data/
 data/chroma/
+data/chroma/chroma.sqlite3
 chroma/
 *.bin
 *.sqlite3
