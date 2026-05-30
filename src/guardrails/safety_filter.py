@@ -19,7 +19,10 @@ from rich.logging import RichHandler
 
 from config import config
 
-logging.basicConfig(handlers=[RichHandler(rich_tracebacks=True)], level=logging.INFO)
+logging.basicConfig(
+    handlers=[RichHandler(rich_tracebacks=True)],
+    level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
+)
 logger = logging.getLogger(__name__)
 
 # LlamaGuard-3 category code -> human-readable name (all 14 categories).
@@ -203,6 +206,7 @@ class SafetyFilter:
                 max_tokens=20,
                 temperature=0,
             )
+            logger.debug("LlamaGuard raw response (pre-strip): %r", response.choices[0].message.content)
             response_text = response.choices[0].message.content.strip()
         except (APIError, APITimeoutError, APIConnectionError) as exc:
             logger.error("Groq LlamaGuard API error: %s", exc)

@@ -1,295 +1,475 @@
 ---
 title: LLM Arena
 emoji: 🤖
-colorFrom: blue
-colorTo: purple
+colorFrom: orange
+colorTo: red
 sdk: gradio
 sdk_version: 5.9.1
 app_file: app.py
 pinned: false
 ---
 
-# Dual AI Assistant Comparison System
+# LLM Arena
 
-A production-quality evaluation platform that runs two AI assistants side by side — an open-source Qwen2.5-0.5B deployed on Modal serverless GPU and Groq-hosted Llama-3.3-70B — with real-time async parallel token streaming, three-layer persistent memory backed by Pinecone, DuckDuckGo web search, LlamaGuard-style safety classification via Groq, and automated deployment to HuggingFace Spaces via GitHub Actions CI/CD. Assistants are scored on hallucination, bias handling, and content safety using a Groq LLM judge.
+Side-by-side comparison and evaluation of an open-source model (Qwen 2.5-0.5B on Modal GPU) against a frontier hosted model (Llama 3.3-70B via Groq), with real-time streaming, three-layer persistent memory, web search tool use, LlamaGuard-based safety classification, and automated evaluation across hallucination, bias, and content safety.
+
+**GitHub:** https://github.com/Thebinary110/llm-arena/tree/Refractoring-Scale  
+**Live Demo:** https://huggingface.co/spaces/IntimateUser6969/llm-arena
 
 ---
 
-## Architecture Diagram
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│              Gradio UI -- HuggingFace Spaces (app.py)                    │
-│        Chat tab  |  Safety accordion  |  Memory Inspector  |  Clear/Send  │
-└────────────────────────┬───────────────────────────┬─────────────────────┘
-                         │ async stream               │ async stream
-                         ▼                            ▼
-         ┌──────────────────────┐      ┌──────────────────────────┐
-         │    OSSAssistant      │      │    FrontierAssistant     │
-         │  (BaseAssistant)     │      │    (BaseAssistant)       │
-         │  ConversationMemory  │      │    ConversationMemory    │
-         └──────────┬───────────┘      └────────────┬─────────────┘
-                    │                               │
-           USE_MODAL=True                      Groq API
-                    ▼                               ▼
-         Modal T4 GPU endpoint         llama-3.3-70b-versatile
-         qwen2.5:0.5b                  ~200-400 ms latency
-         ~300-500 ms (warm)
-                    │                               │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │         ToolRegistry           │
-                    │   WebSearchTool (DuckDuckGo)   │
-                    │   SEARCH[query] pattern match  │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │   StructuredMemoryManager      │
-                    │  Layer 1: Working  (deque)     │
-                    │  Layer 2: Episodic (Pinecone)  │
-                    │  Layer 3: Semantic (Pinecone)  │
-                    │  Embeddings: all-MiniLM-L6-v2  │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │         SafetyFilter           │
-                    │  LlamaGuard via Groq (primary) │
-                    │  Keyword hard filter (second)  │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-         ┌──────────────────────────────────────────────┐
-         │              Evaluation Engine               │
-         │  HallucinationEvaluator (Groq LLM judge)     │
-         │  SafetyEvaluator        (Groq LLM judge)     │
-         │  -> EvalResult list                          │
-         └──────────────────────────┬───────────────────┘
-                                    │
-                                    ▼
-                        ┌───────────────────────┐
-                        │    ReportGenerator    │
-                        │    Evidently HTML     │
-                        │    Rich console table │
-                        │    Raw JSON dump      │
-                        └───────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                     HuggingFace Spaces                              │
+│                     Gradio UI  (app.py)                             │
+│          Chat Tab (side-by-side)  |  Memory Inspector Tab           │
+└────────────────┬────────────────────────────┬───────────────────────┘
+                 │                            │
+    ┌────────────▼──────────┐    ┌────────────▼──────────────┐
+    │     OSSAssistant      │    │    FrontierAssistant       │
+    │   (BaseAssistant)     │    │    (BaseAssistant)         │
+    │   USE_MODAL=True      │    │    Groq API                │
+    └────────────┬──────────┘    └────────────┬──────────────┘
+                 │                            │
+    Modal T4 GPU endpoint           llama-3.3-70b-versatile
+    qwen2.5:0.5b (Transformers)     ~200-400ms warm latency
+    ~300-500ms warm latency
+                 │                            │
+                 └──────────────┬─────────────┘
+                                │
+          ┌─────────────────────▼──────────────────────┐
+          │              ToolRegistry                   │
+          │         WebSearchTool (DuckDuckGo)          │
+          │    Triggered by SEARCH: pattern in output   │
+          └─────────────────────┬──────────────────────┘
+                                │
+          ┌─────────────────────▼──────────────────────┐
+          │         StructuredMemoryManager             │
+          │  Layer 1: Working Memory (deque, in-proc)   │
+          │  Layer 2: Episodic Memory (Pinecone)        │
+          │  Layer 3: Semantic Memory (Pinecone)        │
+          │  Embeddings: all-MiniLM-L6-v2 (local CPU)  │
+          └─────────────────────┬──────────────────────┘
+                                │
+          ┌─────────────────────▼──────────────────────┐
+          │              SafetyFilter                   │
+          │  Primary:  GPT-OSS-Safeguard-20B via Groq  │
+          │  Secondary: Keyword hard filter             │
+          └─────────────────────┬──────────────────────┘
+                                │
+          ┌─────────────────────▼──────────────────────┐
+          │           Evaluation Engine                 │
+          │  HallucinationEvaluator (Groq LLM judge)   │
+          │  SafetyEvaluator (Groq + keyword filter)    │
+          │  BiasEvaluator (Groq LLM judge)             │
+          │  ReportGenerator (Evidently + Rich)         │
+          └─────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-| Library                   | Version      | Role                                              | Rationale                                                             |
-|---------------------------|--------------|---------------------------------------------------|-----------------------------------------------------------------------|
-| Gradio                    | 4.44.0       | Web UI                                            | Fastest path from Python functions to shareable web demo              |
-| Groq Python SDK           | 0.11.0       | Frontier chat, LlamaGuard safety, LLM judge       | Single free API key covers all three uses; ~200-400 ms latency        |
-| LlamaGuard via Groq SDK   | Groq 0.11.0  | Real-time safety classification                   | Context-aware, understands intent not just keywords, 14 harm categories, reuses existing Groq key |
-| Modal                     | 0.64.0       | Serverless GPU for OSS model                      | Scale-to-zero T4 GPU; only pay during inference                       |
-| Ollama                    | 0.3.3        | Local OSS model for development                   | Zero-cost local dev; drop-in swap via USE_MODAL flag                  |
-| Pinecone                  | >=3.0.0      | Persistent vector memory storage                  | Free tier, serverless, survives redeployments; one index with namespace separation |
-| sentence-transformers     | 3.1.1        | Local embeddings for memory retrieval             | Runs on CPU, no API key, all-MiniLM-L6-v2 at 384 dimensions          |
-| duckduckgo-search         | 6.2.13       | Web search tool for both assistants               | Free, no API key, no rate limits                                      |
-| Evidently                 | 0.4.33       | Evaluation metrics + HTML reports                 | Purpose-built for ML model comparison dashboards                      |
-| Pydantic / Settings       | 2.9.2        | Data validation and config management             | Type-safe config from env vars; validates at startup                  |
-| Rich                      | 13.9.2       | CLI logging and pretty console output             | Replaces bare print(); structured, coloured, traceback-aware          |
-| pytest                    | 8.3.3        | Unit tests                                        | Industry standard; all tests run without live API keys                |
+| Library | Version | Role | Rationale |
+|---|---|---|---|
+| Gradio | 5.9.1 | Web UI | Native HF Spaces support, built-in chat, shareable link |
+| Groq Python SDK | 0.11.0 | Frontier chat + safety + eval judge | Single free API key for three roles |
+| Modal | 0.64.0 | Serverless GPU for OSS model | Scale-to-zero T4, pay only during inference |
+| Ollama | 0.3.3 | Local OSS model for development | Zero-cost local dev, drop-in swap via USE_MODAL flag |
+| Pinecone | >=3.0.0 | Persistent vector memory | Free tier, serverless, survives redeployments |
+| sentence-transformers | 3.1.1 | Local embeddings for memory | CPU, no API key, 384-dim all-MiniLM-L6-v2 |
+| duckduckgo-search | 6.2.13 | Web search tool | Free, no API key, no rate limits locally |
+| Evidently | 0.4.33 | Evaluation metrics and HTML reports | Purpose-built for ML model comparison |
+| Pydantic Settings | 2.9.2 | Config from environment variables | Type-safe, validates at startup |
+| Rich | 13.9.2 | CLI logging and console output | Structured, coloured, traceback-aware |
+| pytest | 8.3.3 | Unit tests | Runs without live API keys via mocks |
 
 ---
 
-## Setup Instructions
+## Local Development Setup
 
-### a. Clone and create a virtual environment
+### a. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd dual-ai-assistant
+git clone https://github.com/Thebinary110/llm-arena.git
+cd llm-arena
+git checkout Refractoring-Scale
+```
+
+### b. Create and activate a virtual environment
+
+```bash
 python -m venv .venv
+
 # Windows
 .venv\Scripts\activate
-# macOS/Linux
+
+# macOS / Linux
 source .venv/bin/activate
 ```
 
-### b. Install dependencies
+### c. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Note:** `torch` is a large download and is required by `sentence-transformers` for local memory embeddings. If you only need the Gradio UI without persistent memory, you can comment out `sentence-transformers` and `torch` in `requirements.txt` first.
-
-### c. Configure environment variables
+### d. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and fill in at minimum:
-- `GROQ_API_KEY` — get a free key at [console.groq.com](https://console.groq.com)
-- Leave `USE_MODAL=False` and `USE_PINECONE=False` for local development
+Open `.env` and fill in at minimum:
 
-### d. Install Ollama and pull the OSS model (local dev)
+```
+GROQ_API_KEY=your_groq_api_key_here
+USE_MODAL=False
+USE_PINECONE=False
+```
 
-1. Download Ollama from [ollama.com](https://ollama.com)
-2. Start the Ollama server (it runs as a background service)
+Get a free Groq API key at https://console.groq.com
+
+### e. Install Ollama for local OSS model development
+
+1. Download Ollama from https://ollama.com
+2. Start the Ollama server (runs as a background service after install)
 3. Pull the model:
 
 ```bash
 ollama pull qwen2.5:0.5b
 ```
 
-### e. Launch the chat UI
+### f. Run the app locally
 
 ```bash
 python main.py --mode chat
 ```
 
-Gradio will print a local URL (e.g. `http://127.0.0.1:7860`) and a public share link.
+Gradio prints a local URL at `http://127.0.0.1:7860`.
 
-### f. Running on HuggingFace Spaces
+### g. Run tests
 
-The live deployment is available at:
-**https://huggingface.co/spaces/IntimateUser6969/llm-arena**
+```bash
+python main.py --mode test
+```
 
-To use the hosted Space, `USE_MODAL=True` and `USE_PINECONE=True` must be set as Space secrets so the OSS model routes to the Modal endpoint and memory persists in Pinecone rather than local disk. All API keys must be added as Space secrets in the Space settings panel. See the Deployment section below for the full secrets checklist.
+Or directly:
 
----
+```bash
+pytest tests/ -v
+```
 
-## Running Evaluation
+### h. Run evaluation
 
 ```bash
 python main.py --mode eval
 ```
 
-This will:
-1. Load all 39 prompts from `eval_data/`
-2. Run each prompt through both assistants
-3. Score each response with Groq-based LLM judges
-4. Generate an HTML report in `outputs/eval_report_<timestamp>.html`
-5. Print a summary table to the console
+This loads all 39 prompts from `eval_data/`, runs them through both assistants, scores with an LLM judge, and generates an HTML report in `outputs/`.
 
 ---
 
-## Deployment
+## Deploying the OSS Model to Modal
 
-### Modal OSS Model Deployment
+If you do not have a Modal account, create one at https://modal.com (free tier available, no credit card required for the initial credits).
 
-1. Authenticate with Modal:
+### Step 1: Install Modal and authenticate
 
 ```bash
-modal setup
+pip install modal
+python -m modal setup
 ```
 
-2. Deploy the serverless endpoint:
+This opens a browser window to authenticate. Follow the prompts.
+
+### Step 2: Deploy the endpoint
 
 ```bash
 modal deploy deployment/modal_app.py
 ```
 
-3. Copy the printed HTTPS endpoint URL into your `.env`:
+Modal will print an HTTPS endpoint URL after deployment. It looks like:
+
+```
+https://your-workspace--qwen-assistant-chat-endpoint.modal.run
+```
+
+Copy this URL.
+
+### Step 3: Update your environment
+
+Add to your `.env`:
 
 ```
 MODAL_ENDPOINT=https://your-workspace--qwen-assistant-chat-endpoint.modal.run
 USE_MODAL=True
 ```
 
-The endpoint auto-scales to zero when idle and wakes on the first request (~10-15 s cold start for the 0.5B model on T4).
-
-### HuggingFace Spaces Deployment
-
-**Prerequisites:** Groq API key, Modal endpoint URL, and Pinecone API key must all be ready before deploying.
-
-**Step 1: Push code to the HF remote**
+### Step 4: Verify the endpoint
 
 ```bash
-git push hf main
+python -c "
+import requests
+resp = requests.post(
+    'https://your-workspace--qwen-assistant-chat-endpoint.modal.run',
+    json={'messages': [{'role': 'user', 'content': 'hello'}], 'max_tokens': 50}
+)
+print(resp.json())
+"
 ```
 
-**Step 2: Add all required secrets in Space settings**
+### Modal Troubleshooting
 
-In the Space settings panel under "Variables and secrets", add each of the following:
+**429 Too Many Requests:**  
+Your Modal free tier has hit its concurrency limit. Either wait a few minutes or create a new Modal account for fresh credits. Update `MODAL_ENDPOINT` with the new deployment URL.
 
-| Secret | Value |
-|--------|-------|
-| `GROQ_API_KEY` | your Groq API key |
-| `MODAL_ENDPOINT` | your Modal endpoint URL |
-| `PINECONE_API_KEY` | your Pinecone API key |
-| `PINECONE_INDEX_NAME` | `llm-arena-memory` |
-| `USE_PINECONE` | `True` |
-| `USE_MODAL` | `True` |
-| `OSS_MODEL_NAME` | `qwen2.5:0.5b` |
-| `FRONTIER_MODEL_NAME` | `llama-3.3-70b-versatile` |
-| `LLAMAGUARD_MODEL` | `llama-3.1-8b-instant` |
-| `CONVERSATION_MAX_TURNS` | `10` |
-| `TOXICITY_THRESHOLD` | `0.7` |
+**Cold start taking 15-20 seconds:**  
+This is normal on the free tier. The container is loading Qwen from scratch. Warm calls after the first one are 300-500ms. Set `min_containers=1` in `deployment/modal_app.py` to keep the container warm permanently (costs ~$0.28/day).
 
-**Step 3: Restart the Space to apply secrets**
+**Modal endpoint not available / account exhausted:**  
+Switch to the HuggingFace Inference API as a fallback. Set `USE_MODAL=False` in your `.env` and `OLLAMA_BASE_URL` to the HF Inference API endpoint for Qwen2.5-0.5B. The OSS assistant will degrade gracefully.
 
-After adding all secrets, restart the Space from the settings panel. The build log will show the Gradio server starting on port 7860.
+---
 
-**Live URL:** https://huggingface.co/spaces/IntimateUser6969/llm-arena
+## Deploying to HuggingFace Spaces
 
-### CI/CD via GitHub Actions
+### Prerequisites
 
-Every push to the `main` branch triggers the workflow in `.github/workflows/deploy.yml`:
+Have these API keys ready:
+- Groq API key from https://console.groq.com
+- Modal endpoint URL from the deployment above
+- Pinecone API key from https://app.pinecone.io (free account, no billing)
+- HuggingFace token with write permissions from https://huggingface.co/settings/tokens
 
-1. `pytest` runs first against the full test suite with a dummy Groq key
-2. If all tests pass, the workflow force-pushes the branch to the HF Spaces remote
+### Step 1: Add the HF remote to your local repo
 
-To enable this, add `HF_TOKEN` as a secret in the GitHub repository settings under Settings > Secrets and variables > Actions.
+```bash
+git remote add hf https://YOUR_HF_USERNAME:YOUR_HF_TOKEN@huggingface.co/spaces/YOUR_USERNAME/llm-arena
+```
+
+### Step 2: Push your code to HF Spaces
+
+```bash
+git push hf YOUR_BRANCH:main --force
+```
+
+If the push is rejected due to binary files in git history:
+
+```bash
+pip install git-filter-repo
+git filter-repo --path data/ --invert-paths --force
+git remote add hf https://YOUR_HF_USERNAME:YOUR_HF_TOKEN@huggingface.co/spaces/YOUR_USERNAME/llm-arena
+git push hf YOUR_BRANCH:main --force
+```
+
+### Step 3: Add secrets in HF Space settings
+
+Go to: `https://huggingface.co/spaces/YOUR_USERNAME/llm-arena/settings`
+
+Add these as **Secrets** (private):
+
+| Secret Name | Value |
+|---|---|
+| GROQ_API_KEY | your Groq API key |
+| MODAL_ENDPOINT | your Modal HTTPS endpoint URL |
+| PINECONE_API_KEY | your Pinecone API key |
+
+Add these as **Variables** (public):
+
+| Variable Name | Value |
+|---|---|
+| PINECONE_INDEX_NAME | llm-arena-memory |
+| USE_PINECONE | True |
+| USE_MODAL | True |
+| OSS_MODEL_NAME | qwen2.5:0.5b |
+| FRONTIER_MODEL_NAME | llama-3.3-70b-versatile |
+| LLAMAGUARD_MODEL | openai/gpt-oss-safeguard-20b |
+| CONVERSATION_MAX_TURNS | 10 |
+| TOXICITY_THRESHOLD | 0.7 |
+| LOG_LEVEL | INFO |
+
+### Step 4: Restart the Space
+
+Click **Factory reboot** in Space settings to pick up all secrets and rebuild from scratch.
+
+### Step 5: Watch build logs
+
+Go to the Space URL and click the **Logs** tab. The build takes 3-5 minutes. Common errors and fixes:
+
+**`No module named 'pyaudioop'`:**  
+Python version mismatch. Add a `.python-version` file at the root containing `3.10` and push again. Or update `sdk_version` in README.md frontmatter to `5.9.1`.
+
+**Binary files rejected:**  
+Run the `git filter-repo` command above to purge `data/` from history.
+
+**`StructuredMemoryManager init failed`:**  
+PINECONE_API_KEY secret is missing or incorrect. Verify it in Space settings.
+
+---
+
+## CI/CD Pipeline
+
+Every push to the `main` branch on GitHub triggers an automated pipeline via GitHub Actions.
+
+### Pipeline steps
+
+```
+Push to main branch
+      |
+      v
+Run pytest tests/ -v
+      |
+      v (if tests pass)
+Push to HuggingFace Spaces
+      |
+      v
+HF Spaces rebuilds and redeploys
+```
+
+### Setup
+
+1. Go to your GitHub repository Settings > Secrets and Variables > Actions
+2. Add a new repository secret:
+   - Name: `HF_TOKEN`
+   - Value: your HuggingFace token with write permissions
+
+The workflow file is at `.github/workflows/deploy.yml`.
+
+### Workflow behaviour
+
+- Tests run on every push to every branch
+- Deployment to HF Spaces only happens on push to `main`
+- If pytest fails, deployment is blocked
+- Force push to HF remote handles diverged history automatically
 
 ---
 
 ## Architecture Decisions
 
-- **Identical system prompts across both models** — ensures any score difference is attributable to model capability, not prompt phrasing. Both assistants receive the same instructions so comparisons are fair.
+**Identical system prompts across both models**  
+Any score difference is attributable to model capability, not prompt phrasing. Both models receive the same instructions, the same memory context, and the same tool definitions.
 
-- **LlamaGuard via Groq for safety classification** — LlamaGuard reuses the existing Groq API key and understands context and intent rather than matching surface patterns. A keyword hard filter runs as a second layer to catch drug synthesis and weapons content that semantic classifiers may miss when content is framed as hypothetical or educational. Together the two layers cover both intent-based and pattern-based harmful content.
+**LlamaGuard and GPT-OSS-Safeguard for safety classification**  
+Context-aware safety models understand intent rather than just surface keywords. A drug synthesis tutorial scores 0.000 on Detoxify (no profanity) but correctly triggers GPT-OSS-Safeguard. A keyword hard filter runs as a second layer for deterministic blocking of known harmful patterns.
 
-- **Three-layer memory architecture** — working memory in a deque handles recent turns without I/O overhead. Episodic and semantic layers use Pinecone for cross-session persistence that survives redeployments. Local sentence-transformers embeddings mean zero API calls for memory retrieval. Facts are extracted via `[REMEMBER: ...]` tags parsed by regex — deterministic and reproducible, unlike LLM-based extraction.
+**Three-layer memory with Pinecone**  
+Working memory (deque) handles recent turns in-process. Episodic and semantic layers use Pinecone for cross-session persistence. Local sentence-transformers embeddings mean zero API calls for retrieval. Facts are extracted via REMEMBER tags parsed by regex — deterministic and reproducible unlike LLM-based extraction.
 
-- **Tool registry pattern for web search** — a `ToolRegistry` with `BaseTool` abstraction means adding new tools requires zero changes to assistants or UI. DuckDuckGo search is free with no API key and no rate limits. Tool calls are detected via regex pattern matching in model output, which works with both OSS and frontier models without requiring native function-calling support.
+**Tool registry pattern for web search**  
+A ToolRegistry with BaseTool abstraction means adding new tools requires zero changes to assistants or the UI. Tools are triggered by pattern matching in model output, not native function calling, so they work identically for both models regardless of their tool-calling support.
 
-- **Async parallel streaming** — both assistants stream tokens simultaneously using asyncio generators and queue-based concurrency. Perceived latency equals the time to first token of the slower model rather than the sum of both latencies. `trigger_mode="once"` on Gradio event handlers prevents duplicate submissions during streaming.
+**Async parallel streaming**  
+Both assistants stream tokens simultaneously using asyncio generators. Perceived latency equals the time-to-first-token of the slower model rather than the sum of both. `trigger_mode="once"` on Gradio event handlers prevents duplicate submissions from Enter and click both firing.
+
+**USE_MODAL and USE_PINECONE flags**  
+Both flags default to False so local development uses Ollama and ChromaDB with zero external dependencies. Setting them to True in HF Space secrets switches to production backends without code changes.
 
 ---
 
-## Tradeoffs Made
+## Tradeoffs
 
-- **LlamaGuard binary verdict vs float scores** — LlamaGuard returns `safe` or `unsafe`, not a confidence float. The `SafetyResult` interface maps `unsafe` to `toxicity_score=1.0` and `safe` to `0.0` for caller compatibility. This loses score granularity but gains semantic understanding of intent that float-based classifiers lack.
+**LlamaGuard binary verdict vs float scores**  
+LlamaGuard returns `safe` or `unsafe`, not a confidence float. The interface maps unsafe to 1.0 and safe to 0.0 to maintain compatibility with SafetyResult. This loses score granularity but gains semantic understanding of intent over any float-based toxicity model.
 
-- **Groq as both chat model and judge** — using Groq for frontier chat, safety classification, and evaluation judging introduces potential bias since the judge and the judged share an API provider. A separate judge model would be more rigorous. Accepted because it keeps the entire stack to one free API key.
+**Groq as chat model, safety classifier, and eval judge**  
+Using one API for all three roles introduces potential judge bias — the same provider evaluates its own model. Accepted because it keeps the stack to one free API key. A separate judge provider (Claude, GPT-4) would be more rigorous.
 
-- **Pinecone free tier single index** — the free tier allows one index only. Episodes and facts are separated by namespace within that index. This works but means all users share index capacity on the free tier and a high-traffic deployment would require a paid plan.
+**Pinecone free tier single index with namespaces**  
+Free tier allows one index. Episodes and facts are separated by namespace within one index. This works but means all users and both assistants share index capacity on the free tier.
 
-- **Keyword hard filter for OSS safety** — the keyword filter is bypassable with paraphrasing and does not understand context. It catches obvious patterns but not sophisticated harmful requests. Accepted as a second layer behind LlamaGuard, not as a primary safety mechanism.
+**Keyword hard filter is bypassable**  
+The keyword filter catches obvious patterns but not paraphrased harmful requests. It is a second layer behind the semantic classifier, not a primary safety mechanism. Accepted as defence-in-depth rather than sole protection.
 
-- **Modal cold starts for OSS model** — Qwen2.5-0.5B on Modal T4 has 2-3 second cold starts after idle periods. Setting `min_containers=1` would eliminate this but costs money even when idle. Accepted for demo purposes where occasional cold starts are tolerable.
+**DuckDuckGo rate limited on HF Spaces cloud IPs**  
+DuckDuckGo blocks requests from shared cloud infrastructure. The tool triggers but returns a rate limit error on the deployed Space. The fix (Brave Search API free tier) is straightforward but not yet implemented.
 
 ---
 
 ## What I Would Improve With More Time
 
-- **Replace custom memory with mem0** — the current three-layer memory system is hand-built and accumulates contradictions over time. mem0 with a ChromaDB backend would add automatic memory conflict resolution, updating stored facts when they change rather than appending duplicates.
+**Replace custom memory with mem0**  
+mem0 adds automatic memory conflict resolution — when the user says they switched from PostgreSQL to MongoDB, it updates the existing memory rather than storing a contradiction. The current three-layer system accumulates contradictions without reconciling them. The abstraction is already shaped for this migration.
 
-- **Streaming tool use** — currently tool calls interrupt streaming and return a non-streaming response after the search completes. True streaming tool use would show the search query and results appearing inline within the response stream, giving users visibility into what was searched and why.
+**Streaming tool use**  
+Currently a tool call interrupts streaming and returns a non-streaming response. True streaming tool use would show the SEARCH trigger and results inline in the token stream, matching how users expect it to work.
 
-- **Memory utilization as an evaluation metric** — adding a fifth evaluation category measuring whether each model correctly uses injected memory context would surface a meaningful capability gap. Frontier models use retrieved facts reliably. OSS models at 0.5B often ignore injected context entirely. This difference is measurable and worth surfacing in the report.
+**Memory utilization as a fifth evaluation metric**  
+Injecting memory context the model ignores is measurably different from the frontier model behavior. A test sequence (introduce yourself in turn 1, ask an unrelated question in turns 2-4, ask the model to reference you by name in turn 10) would surface this gap quantitatively.
 
-- **Persistent evaluation history** — store all `EvalResult` records in a database so reports can compare across sessions and track whether model behaviour changes over time. Currently each eval run is independent and cannot be compared to previous runs.
+**Brave Search API replacing DuckDuckGo**  
+Free tier, 2000 queries per month, works from cloud IPs, no credit card. One import change in `src/tools/web_search.py`.
 
-- **Live evaluation dashboard** — a second Gradio tab showing rolling safety scores, latency percentiles, and memory retention rate updating in real time as users chat would turn the demo into a living experiment rather than a static one-off comparison.
+**Live evaluation dashboard**  
+A second Gradio tab showing rolling safety scores, latency percentiles, and memory retention rate updating in real time as users chat would turn the demo into a living experiment. Every chat message generates evaluation data automatically.
+
+**vLLM deployment for OSS model**  
+Replacing HuggingFace Transformers with vLLM on Modal would enable continuous batching and PagedAttention, reducing cold-start latency and supporting concurrent users. Estimated improvement: 2-4x throughput on the same T4 GPU.
+
+**Persistent evaluation history**  
+Store all EvalResults in SQLite so reports compare across sessions and track whether model behavior changes over time. Currently each eval run is independent and results are not persisted.
 
 ---
 
-## Cost & Latency Table
+## Cost and Latency Reference
 
-| Backend              | Avg Latency         | Cost                    | Notes                                                |
-|----------------------|---------------------|-------------------------|------------------------------------------------------|
-| Ollama (local)       | ~2-4 s on CPU       | $0                      | Dev only; no GPU needed for 0.5B                     |
-| Modal T4 GPU         | ~300-500 ms (warm)  | ~$0.0002 per 1K tokens  | Serverless; ~10-15 s cold start after idle           |
-| Groq API             | ~200-400 ms         | $0 (free tier)          | Rate limited; ~30 req/min free tier                  |
-| Pinecone free tier   | ~50-100 ms retrieval| $0 (per vector op)      | 1 index free, 2 GB storage, persists across deploys  |
-| LlamaGuard via Groq  | ~200-400 ms         | $0 (free tier)          | 1 extra Groq call per response, reuses existing key  |
-| DuckDuckGo Search    | ~500 ms-2 s         | $0 (no API key)         | Triggered only when model outputs SEARCH pattern     |
-| HuggingFace Spaces   | N/A (hosting)       | $0 (free CPU tier)      | Permanent URL; no forced sleep with active traffic   |
+| Backend | Avg Latency | Cost per 1K tokens | Notes |
+|---|---|---|---|
+| Ollama local | 2-4s on CPU | $0.00 | Dev only, no GPU needed for 0.5B |
+| Modal T4 GPU | 300-500ms warm | ~$0.0002 | Cold start 2-3s, serverless, scale-to-zero |
+| Groq API | 200-400ms | $0.00 free tier | Rate limited, ~30 req/min free tier |
+| Pinecone free | 50-100ms retrieval | $0.00 free tier | 1 index, 2GB storage, persistent across deploys |
+| GPT-OSS-Safeguard | 200-400ms | $0.00 free tier | 1 extra Groq call per response |
+| DuckDuckGo Search | 500ms-2s | $0.00 | Rate limited on HF Spaces cloud IPs |
+| HuggingFace Spaces | N/A | $0.00 free CPU tier | Permanent URL, no sleep with traffic |
+
+---
+
+## Project Structure
+
+```
+dual-ai-assistant/
+├── src/
+│   ├── assistants/
+│   │   ├── base.py                  # Abstract BaseAssistant, AssistantResponse
+│   │   ├── oss_assistant.py         # Qwen 2.5-0.5B via Ollama or Modal
+│   │   └── frontier_assistant.py    # Llama 3.3-70B via Groq
+│   ├── memory/
+│   │   ├── conversation_memory.py   # Sliding window (used by eval pipeline)
+│   │   └── structured_memory.py     # Three-layer ChromaDB/Pinecone memory
+│   ├── guardrails/
+│   │   └── safety_filter.py         # GPT-OSS-Safeguard + keyword filter
+│   ├── tools/
+│   │   ├── base_tool.py             # BaseTool abstract class, ToolResult
+│   │   ├── web_search.py            # DuckDuckGo WebSearchTool
+│   │   └── tool_registry.py         # Registry + pattern detection
+│   ├── evaluation/
+│   │   ├── evaluator.py             # BaseEvaluator, EvalResult dataclass
+│   │   ├── hallucination.py         # LLM-as-judge hallucination scorer
+│   │   ├── bias_safety.py           # LLM-as-judge safety scorer
+│   │   └── report_generator.py      # Evidently HTML + Rich console table
+│   └── ui/
+│       └── app.py                   # Gradio Blocks layout, async streaming
+├── eval_data/
+│   ├── factual_prompts.json         # 15 factual prompts with ground truth
+│   ├── adversarial_prompts.json     # 12 jailbreak and harmful request prompts
+│   └── bias_prompts.json            # 12 stereotype and discrimination prompts
+├── deployment/
+│   └── modal_app.py                 # Modal serverless GPU deployment
+├── tests/
+│   ├── test_memory.py
+│   ├── test_guardrails.py
+│   └── test_evaluators.py
+├── .github/
+│   └── workflows/
+│       └── deploy.yml               # GitHub Actions CI/CD
+├── app.py                           # HuggingFace Spaces entry point
+├── config.py                        # Pydantic Settings from env vars
+├── main.py                          # CLI: --mode chat | eval | test
+├── requirements.txt
+├── .env.example
+├── .python-version                  # Pins Python 3.10 for HF Spaces
+└── README.md
+```

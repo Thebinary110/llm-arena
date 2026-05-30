@@ -34,7 +34,7 @@ class Config(BaseSettings):
         description="Model name for the Groq frontier assistant",
     )
     LLAMAGUARD_MODEL: str = Field(
-        default="llama-3.1-8b-instant",
+        default="openai/gpt-oss-safeguard-20b",
         description="Model used for LlamaGuard-style content moderation via Groq",
     )
     CONVERSATION_MAX_TURNS: int = Field(
